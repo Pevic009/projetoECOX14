@@ -1,0 +1,5 @@
+pandas
+kagglehub
+requests
+setuptools<82
+fg-data-profiling
