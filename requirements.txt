@@ -3,3 +3,5 @@ kagglehub
 requests
 setuptools<82
 fg-data-profiling
+pyarrow
+numpy
