@@ -10,10 +10,42 @@ BRONZE = Path("dados/bronze/transfermarkt")
 PRATA = Path("dados/prata")
 PADRAO = "transfers_*.csv"
 
-MAPA_CLUBES_BR = {
-    "sao paulo futebol clube": "sao paulo",
-    "clube atletico mineiro": "atletico mineiro",
-    "cr flamengo": "flamengo"
+MAPA_CLUBES_TM = {
+    "america-mg": "america-mg",
+    "athletico-pr": "athletico-pr",
+    "atl. parana": "athletico-pr",
+    "atletico-go": "atletico-go",
+    "atletico-mg": "atletico-mg",
+    "avai fc": "avai",
+    "botafogo": "botafogo-rj",
+    "botafogo fr": "botafogo-rj",
+    "bragantino": "bragantino",
+    "ceara sc": "ceara",
+    "chapecoense": "chapecoense",
+    "corinthians": "corinthians",
+    "coritiba fc": "coritiba",
+    "criciuma": "criciuma",
+    "cruzeiro": "cruzeiro",
+    "csa": "csa",
+    "cuiaba-mt": "cuiaba",
+    "ec bahia": "bahia",
+    "ec vitoria": "vitoria",
+    "flamengo": "flamengo",
+    "fluminense": "fluminense",
+    "fortaleza": "fortaleza",
+    "goias": "goias",
+    "gremio": "gremio",
+    "internacional": "internacional",
+    "juventude": "juventude",
+    "mirassol-sp": "mirassol",
+    "palmeiras": "palmeiras",
+    "parana": "parana",
+    "rb bragantino": "bragantino",
+    "santos": "santos",
+    "santos fc": "santos",
+    "sao paulo": "sao paulo",
+    "sport recife": "sport",
+    "vasco da gama": "vasco"
 }
 
 def carregar():
@@ -36,7 +68,7 @@ def remover_colunas_inuteis(df):
     
     return df
 
-def filtrar_e_formatar_datas(df, ano_minimo=2018):
+def filtrar_e_formatar_datas(df, ano_minimo=2018, ano_maximo=2026):
     """Garante o tipo datetime para datas, cria atributo de ano civil e filtra registros antigos."""
     df["transfer_date"] = pd.to_datetime(df["transfer_date"], errors="coerce")
     
@@ -44,20 +76,21 @@ def filtrar_e_formatar_datas(df, ano_minimo=2018):
     df["transfer_year"] = df["transfer_date"].dt.year.astype("Int64")
     
     # Aplicacao do filtro de dominio temporal
-    valido = df["transfer_year"] >= ano_minimo
+    valido = (df["transfer_year"] >= ano_minimo) & (df["transfer_year"] <= ano_maximo)
     df_filtrado = df[valido].copy()
-    
-    print(f"Registros anteriores a {ano_minimo} removidos:", (~valido).sum())
+
+    removidos = (~valido).sum()
+    print(f"Registros fora da faixa {ano_minimo}-{ano_maximo} removidos:", removidos)
     
     return df_filtrado
 
 def padronizar_nomes_clubes(df):
     """Aplica o modulo de limpeza generico nas chaves de juncao de texto."""
     df["to_club_name_padrao"] = limpeza.chave_texto(df["to_club_name"])
-    df["to_club_name_padrao"] = limpeza.aplicar_mapa(df["to_club_name_padrao"], MAPA_CLUBES_BR)
+    df["to_club_name_padrao"] = limpeza.aplicar_mapa(df["to_club_name_padrao"], MAPA_CLUBES_TM)
 
     df["from_club_name_padrao"] = limpeza.chave_texto(df["from_club_name"])
-    df["from_club_name_padrao"] = limpeza.aplicar_mapa(df["from_club_name_padrao"], MAPA_CLUBES_BR)
+    df["from_club_name_padrao"] = limpeza.aplicar_mapa(df["from_club_name_padrao"], MAPA_CLUBES_TM)
 
     return df
 
@@ -97,6 +130,18 @@ def tratar_valores_financeiros(df):
     
     return df
 
+def remover_erros_financeiros(df, teto_mundial=300_000_000.0):
+    """Remove registros com valores financeiros fisicamente impossíveis (negativos ou irreais)."""
+    # A linha é válida se o valor for nulo (desconhecido) OU se estiver entre zero e o teto máximo
+    valido = df["transfer_fee_num"].isna() | df["transfer_fee_num"].between(0.0, teto_mundial)
+    
+    df_filtrado = df[valido].copy()
+    
+    removidos = (~valido).sum()
+    print(f"Erros financeiros comprovados removidos (fora da faixa 0 - {teto_mundial}):", removidos)
+    
+    return df_filtrado
+
 def salvar(df):
     """Grava o DataFrame tratado na camada Prata utilizando o formato Parquet."""
     PRATA.mkdir(parents=True, exist_ok=True)
@@ -128,9 +173,10 @@ def main():
     
     df = limpeza.tirar_espacos(df)
     df = remover_colunas_inuteis(df)
-    df = filtrar_e_formatar_datas(df, ano_minimo=2018)
+    df = filtrar_e_formatar_datas(df, ano_minimo=2018, ano_maximo=2026)
     df = padronizar_nomes_clubes(df)
     df = tratar_valores_financeiros(df)
+    df = remover_erros_financeiros(df)
     
     destino = salvar(df)
     
@@ -141,6 +187,7 @@ def main():
         "criacao de transfer_year e exclusao de registros anteriores a 2018",
         "padronizacao lowercase sem acentos em nomes de clubes para futura juncao",
         "extracao de valores financeiros de texto para float64 (cost-free tipado como 0.0)"
+        "remocao de erros financeiros comprovados (valores negativos ou acima do teto mundial)"
     ])
 
 if __name__ == "__main__":

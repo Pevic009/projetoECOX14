@@ -10,9 +10,37 @@ PRATA = Path("dados/prata")
 PADRAO = "partidas_*.csv"
 
 MAPA_CLUBES_BR = {
-    "atletico-mg": "atletico mineiro",
-    "sao paulo fc": "sao paulo",
-    "athletico-pr": "athletico paranaense"
+    "america-mg": "america-mg",
+    "athletico-pr": "athletico-pr",
+    "atletico-go": "atletico-go",
+    "atletico-mg": "atletico-mg",
+    "avai": "avai",
+    "bahia": "bahia",
+    "botafogo-rj": "botafogo-rj",
+    "bragantino": "bragantino",
+    "ceara": "ceara",
+    "chapecoense": "chapecoense",
+    "corinthians": "corinthians",
+    "coritiba": "coritiba",
+    "criciuma": "criciuma",
+    "cruzeiro": "cruzeiro",
+    "csa": "csa",
+    "cuiaba": "cuiaba",
+    "flamengo": "flamengo",
+    "fluminense": "fluminense",
+    "fortaleza": "fortaleza",
+    "goias": "goias",
+    "gremio": "gremio",
+    "internacional": "internacional",
+    "juventude": "juventude",
+    "mirassol": "mirassol",
+    "palmeiras": "palmeiras",
+    "parana": "parana",
+    "santos": "santos",
+    "sao paulo": "sao paulo",
+    "sport": "sport",
+    "vasco": "vasco",
+    "vitoria": "vitoria",
 }
 
 def carregar():
@@ -32,7 +60,8 @@ def remover_colunas_inuteis(df):
     # Omissao de variaveis com mais de 50% de nulos e variaveis granulares de tempo/local
     colunas_para_cair = [
         "arrecadacao", "formacao_mandante", "formacao_visitante", 
-        "tecnico_mandante", "tecnico_visitante", "hora", "arena"
+        "tecnico_mandante", "tecnico_visitante", "hora", "arena",
+        "mandante_Estado", "visitante_Estado"
     ]
     df = df.drop(columns=colunas_para_cair, errors="ignore")
     
@@ -60,6 +89,9 @@ def padronizar_nomes_clubes(df):
 
     df["visitante_padrao"] = limpeza.chave_texto(df["visitante"])
     df["visitante_padrao"] = limpeza.aplicar_mapa(df["visitante_padrao"], MAPA_CLUBES_BR)
+
+    df["vencedor_padrao"] = limpeza.chave_texto(df["vencedor"])
+    df["vencedor_padrao"] = limpeza.aplicar_mapa(df["vencedor_padrao"], MAPA_CLUBES_BR)
     
     return df
 
@@ -71,6 +103,21 @@ def tipar_placares(df):
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
         
     return df
+
+def remover_erros_placares(df, teto_gols=15):
+    """Remove registros com placares impossíveis (negativos ou absurdamente altos)."""
+    # Um placar é válido se for nulo (partida não realizada/sem dado) OU se estiver entre 0 e o teto máximo
+    valido_mandante = df["mandante_Placar"].isna() | df["mandante_Placar"].between(0, teto_gols)
+    valido_visitante = df["visitante_Placar"].isna() | df["visitante_Placar"].between(0, teto_gols)
+    
+    # A linha só sobrevive se AMBOS os placares forem válidos
+    valido = valido_mandante & valido_visitante
+    df_filtrado = df[valido].copy()
+    
+    removidos = (~valido).sum()
+    print(f"Erros comprovados de placar removidos (fora da faixa 0 - {teto_gols}):", removidos)
+    
+    return df_filtrado
 
 def salvar(df):
     """Grava o DataFrame tratado na camada Prata utilizando o formato Parquet."""
@@ -106,6 +153,7 @@ def main():
     df = filtrar_e_formatar_datas(df, ano_minimo=2018)
     df = padronizar_nomes_clubes(df)
     df = tipar_placares(df)
+    df = remover_erros_placares(df)
     
     destino = salvar(df)
     
@@ -116,6 +164,7 @@ def main():
         "criacao de ano_campeonato e exclusao de jogos anteriores a 2018",
         "padronizacao lowercase sem acentos em nomes de clubes para futura juncao",
         "garantia de integridade numerica (Int64) nas colunas de placar"
+        "remocao de erros comprovados nos placares (valores negativos ou acima de 15 gols)"
     ])
 
 if __name__ == "__main__":
